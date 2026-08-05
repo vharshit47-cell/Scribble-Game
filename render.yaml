@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: scribble-server
+    env: node
+    buildCommand: cd server && npm install && npm run build
+    startCommand: cd server && npm start
+    envVars:
+      - key: PORT
+        value: 4000
+      - key: CLIENT_ORIGIN
+        sync: false
