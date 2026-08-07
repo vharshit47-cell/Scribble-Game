@@ -24,9 +24,9 @@ export default function Room() {
       return;
     }
     if (!socket.connected) socket.connect();
-    socket.emit("reconnectToRoom", { code });
+    socket.emit("reconnectToRoom", { code, username });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code]);
+  }, [code, username]);
 
   if (!code) return null;
 

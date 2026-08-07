@@ -78,8 +78,8 @@ export function registerHandlers(io: Server, socket: Socket, gm: GameManager) {
     }
   );
 
-  socket.on("reconnectToRoom", (payload: { code: string }) => {
-    const room = gm.reconnect(payload.code, socket.id);
+  socket.on("reconnectToRoom", (payload: { code: string; username?: string }) => {
+    const room = gm.reconnect(payload.code, socket.id, payload.username);
     if (room) {
       socket.join(room.code);
       gm.broadcastState(room);

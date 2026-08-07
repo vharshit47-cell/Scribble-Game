@@ -62,6 +62,9 @@ export function useSocketEvents() {
     const onErrorToast = (payload: { message: string }) =>
       setToast(payload.message);
 
+    const onCloseGuess = (payload: { message: string }) =>
+      setToast(payload.message);
+
     socket.on("connect", onConnect);
     socket.on("roomState", onRoomState);
     socket.on("chatMessage", onChat);
@@ -76,6 +79,7 @@ export function useSocketEvents() {
     socket.on("gameFinished", onGameFinished);
     socket.on("joinError", onJoinError);
     socket.on("errorToast", onErrorToast);
+    socket.on("closeGuess", onCloseGuess);
 
     if (socket.id) setSelf(socket.id);
 
@@ -94,6 +98,7 @@ export function useSocketEvents() {
       socket.off("gameFinished", onGameFinished);
       socket.off("joinError", onJoinError);
       socket.off("errorToast", onErrorToast);
+      socket.off("closeGuess", onCloseGuess);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

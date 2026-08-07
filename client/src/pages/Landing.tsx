@@ -30,6 +30,7 @@ export default function Landing() {
     if (!ready) return;
     setIdentity(username.trim(), avatar);
     if (!socket.connected) socket.connect();
+    socket.off("roomCreated");
     socket.once("roomCreated", ({ code }: { code: string }) => {
       navigate(`/room/${code}`);
     });
@@ -48,6 +49,7 @@ export default function Landing() {
     setJoinError(null);
     setIdentity(username.trim(), avatar);
     if (!socket.connected) socket.connect();
+    socket.off("roomJoined");
     socket.once("roomJoined", ({ code }: { code: string }) => {
       navigate(`/room/${code}`);
     });

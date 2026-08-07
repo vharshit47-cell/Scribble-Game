@@ -2,7 +2,11 @@ import { Server } from "socket.io";
 import { generateRoomCode } from "../utils/roomCode";
 import { wordsForDifficulty } from "../data/wordbank";
 import { maskWord, HINT_SCHEDULE } from "../utils/hint";
-import { pointsForGuessOrder, drawerPoints } from "../utils/scoring";
+import {
+  calculateGuesserPoints,
+  drawerPoints,
+  isCloseGuess,
+} from "../utils/scoring";
 import {
   Room,
   Player,
@@ -30,6 +34,8 @@ function freshGameState(totalRounds: number): GameState {
     turnStartedAt: null,
     turnEndsAt: null,
     correctGuesserOrder: [],
+    hintsRevealedCount: 0,
+    guessSpeedRatios: [],
   };
 }
 
@@ -147,7 +153,8 @@ export class GameManager {
           if (stillEmpty) this.rooms.delete(room.code);
         }, 60_000);
       } else if (player.isDrawing) {
-        // Drawer left mid-turn: skip to next turn.
+        // Drawer left mid-turn: clear timers first, then skip to next turn.
+        this.clearTimers(room.code);
         this.advanceTurn(room);
       }
 
@@ -156,10 +163,28 @@ export class GameManager {
     return undefined;
   }
 
-  reconnect(roomCode: string, playerId: string): Room | undefined {
+  reconnect(roomCode: string, playerId: string, username?: string): Room | undefined {
     const room = this.getRoom(roomCode);
-    const player = room?.players.get(playerId);
-    if (room && player) {
+    if (!room) return undefined;
+
+    let player = room.players.get(playerId);
+    if (!player && username) {
+      for (const [oldId, p] of room.players.entries()) {
+        if (!p.connected && p.username.toLowerCase() === username.toLowerCase()) {
+          room.players.delete(oldId);
+          p.id = playerId;
+          room.players.set(playerId, p);
+          player = p;
+          if (room.hostId === oldId) room.hostId = playerId;
+          if (room.game.currentDrawerId === oldId) room.game.currentDrawerId = playerId;
+          const idx = room.game.drawOrder.indexOf(oldId);
+          if (idx !== -1) room.game.drawOrder[idx] = playerId;
+          break;
+        }
+      }
+    }
+
+    if (player) {
       player.connected = true;
       this.systemMessage(room, `${player.username} reconnected.`);
       return room;
@@ -186,6 +211,8 @@ export class GameManager {
     const drawerId = game.drawOrder[game.turnIndex];
     game.currentDrawerId = drawerId;
     game.correctGuesserOrder = [];
+    game.hintsRevealedCount = 0;
+    game.guessSpeedRatios = [];
 
     for (const p of room.players.values()) {
       p.hasGuessedCorrectly = false;
@@ -200,6 +227,8 @@ export class GameManager {
     game.turnStartedAt = Date.now();
     game.turnEndsAt = Date.now() + WORD_SELECTION_SECONDS * 1000;
 
+    // Clear visual canvas on all clients for new turn
+    this.io.to(room.code).emit("clearCanvas");
     this.io.to(room.code).emit("wordSelection", {
       drawerId,
       choices,
@@ -223,9 +252,6 @@ export class GameManager {
       (w) => !room.game.usedWords.has(w)
     );
 
-    // Refill intelligently: if the pool is exhausted, reset usedWords
-    // (keeping the game playable indefinitely without ever repeating
-    // a word inside the *current* selection round).
     const source =
       pool.length >= WORD_CHOICE_COUNT
         ? pool
@@ -277,6 +303,7 @@ export class GameManager {
     for (const pct of HINT_SCHEDULE) {
       const timer = setTimeout(() => {
         if (room.game.phase !== "drawing" || !room.game.currentWord) return;
+        room.game.hintsRevealedCount += 1;
         room.game.maskedWord = maskWord(room.game.currentWord, pct);
         this.io.to(room.code).emit("hint", { maskedWord: room.game.maskedWord });
       }, durationMs * pct);
@@ -299,7 +326,19 @@ export class GameManager {
       player.hasGuessedCorrectly = true;
       game.correctGuesserOrder.push(playerId);
       const orderIndex = game.correctGuesserOrder.length - 1;
-      const points = pointsForGuessOrder(orderIndex);
+
+      // Calculate speed ratio (1.0 = immediate guess, 0.0 = last second)
+      const now = Date.now();
+      const totalDuration = room.settings.turnDurationSeconds * 1000;
+      const timeRemaining = game.turnEndsAt ? Math.max(0, game.turnEndsAt - now) : totalDuration / 2;
+      const timeRemainingRatio = Math.min(1, Math.max(0, timeRemaining / totalDuration));
+      game.guessSpeedRatios.push(timeRemainingRatio);
+
+      const points = calculateGuesserPoints({
+        timeRemainingRatio,
+        orderIndex,
+        hintsRevealedCount: game.hintsRevealedCount,
+      });
       player.score += points;
 
       this.pushChat(room, {
@@ -330,6 +369,14 @@ export class GameManager {
         timestamp: Date.now(),
       });
       this.io.to(room.code).emit("chatMessage", this.lastMessage(room));
+
+      // Close guess check & feedback
+      if (game.currentWord && isCloseGuess(text, game.currentWord)) {
+        this.systemMessage(room, `${player.username} is very close!`);
+        this.io.to(playerId).emit("closeGuess", {
+          message: `"${text}" is very close to the secret word!`,
+        });
+      }
     }
   }
 
@@ -345,7 +392,11 @@ export class GameManager {
     );
     const correctCount = game.correctGuesserOrder.length;
     if (drawer) {
-      const points = drawerPoints(correctCount, guessers.length);
+      const avgSpeedRatio =
+        game.guessSpeedRatios.length > 0
+          ? game.guessSpeedRatios.reduce((a, b) => a + b, 0) / game.guessSpeedRatios.length
+          : 0.5;
+      const points = drawerPoints(correctCount, guessers.length, avgSpeedRatio);
       drawer.score += points;
       this.io.to(room.code).emit("drawerScored", {
         playerId: drawer.id,

@@ -78,6 +78,8 @@ export interface GameState {
   turnStartedAt: number | null;
   turnEndsAt: number | null;
   correctGuesserOrder: string[]; // order in which players guessed correctly this turn
+  hintsRevealedCount: number;
+  guessSpeedRatios: number[];
 }
 
 export interface Room {

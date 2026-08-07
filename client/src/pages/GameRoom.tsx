@@ -3,6 +3,7 @@ import { useGameStore } from "../store/gameStore";
 import DrawingCanvas from "../components/DrawingCanvas";
 import CircularTimer from "../components/CircularTimer";
 import Leaderboard from "../components/Leaderboard";
+import PlayerCard from "../components/PlayerCard";
 import ChatBox from "../components/ChatBox";
 import WordSelectionOverlay from "../components/WordSelectionOverlay";
 import RoundSummaryOverlay from "../components/RoundSummaryOverlay";
@@ -51,23 +52,10 @@ export default function GameRoom() {
         <CircularTimer endsAt={room.turnEndsAt} totalSeconds={room.settings.turnDurationSeconds} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr_280px] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr_280px] gap-4">
         <div className="order-2 lg:order-1 flex flex-col gap-2">
           {room.players.map((p) => (
-            <motion.div
-              key={p.id}
-              layout
-              className={`glass-card flex items-center gap-2 px-3 py-2 ${
-                p.isDrawing ? "ring-2 ring-accent" : ""
-              } ${!p.connected ? "opacity-40" : ""}`}
-            >
-              <span className="text-xl">{p.avatar}</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{p.username}</p>
-                <p className="text-xs text-white/40">{p.score} pts</p>
-              </div>
-              {p.hasGuessedCorrectly && <span>✅</span>}
-            </motion.div>
+            <PlayerCard key={p.id} player={p} />
           ))}
         </div>
 

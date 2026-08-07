@@ -137,6 +137,10 @@ export default function DrawingCanvas({ roomCode, isDrawer }: Props) {
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawer) return;
+    e.preventDefault();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
     isPointerDown.current = true;
     const { x, y } = getPos(e);
     const strokeId = `${Date.now()}-${Math.random()}`;
@@ -152,6 +156,7 @@ export default function DrawingCanvas({ roomCode, isDrawer }: Props) {
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawer || !isPointerDown.current || !currentStrokeRef.current) return;
+    e.preventDefault();
     const { x, y } = getPos(e);
     currentStrokeRef.current.points.push({ x, y });
 
@@ -173,8 +178,13 @@ export default function DrawingCanvas({ roomCode, isDrawer }: Props) {
     }
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e?: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawer || !currentStrokeRef.current) return;
+    if (e && e.currentTarget && e.currentTarget.hasPointerCapture(e.pointerId)) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {}
+    }
     isPointerDown.current = false;
     strokesRef.current.push(currentStrokeRef.current);
     emit({ type: "end" });
@@ -210,17 +220,21 @@ export default function DrawingCanvas({ roomCode, isDrawer }: Props) {
       <motion.div
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="rounded-2xl overflow-hidden shadow-float border border-white/10 w-full max-w-3xl"
+        className="rounded-2xl overflow-hidden shadow-float border border-white/10 w-full max-w-3xl select-none"
       >
         <canvas
           ref={canvasRef}
           width={CANVAS_W}
           height={CANVAS_H}
-          className={`w-full h-auto bg-white ${isDrawer ? "cursor-crosshair" : "cursor-not-allowed"}`}
+          style={{ touchAction: "none" }}
+          className={`w-full h-auto bg-white touch-none select-none ${
+            isDrawer ? "cursor-crosshair" : "cursor-not-allowed"
+          }`}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
+          onDragStart={(e) => e.preventDefault()}
         />
       </motion.div>
 
